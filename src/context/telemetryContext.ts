@@ -12,6 +12,7 @@ export type TelemetryContextValue = {
   networkMaxMag: number
   alertLevel: string
   feedMode: FeedMode
+  connectionStatus: 'connected' | 'connecting' | 'disconnected'
   logRows: TelemetryLogRow[]
   clearLog: () => void
   exportLogCsv: () => void

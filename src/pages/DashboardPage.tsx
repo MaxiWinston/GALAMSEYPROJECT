@@ -28,6 +28,8 @@ export function DashboardPage() {
     triangulation,
     networkMaxMag,
     alertLevel,
+    feedMode,
+    connectionStatus,
     addNode,
     removeNode,
   } = useTelemetry()
@@ -102,10 +104,54 @@ export function DashboardPage() {
             </p>
             <p className="text-[10px] opacity-60">{alertHint(alertLevel)}</p>
           </div>
-          <div className="rounded-2xl border border-zinc-700/60 bg-zinc-900/50 px-4 py-2 text-right text-sm">
+          
+          <div className={`rounded-2xl border px-4 py-2 text-right text-sm transition-all duration-300 ${
+            feedMode === 'websocket'
+              ? connectionStatus === 'connected'
+                ? 'border-teal-500/30 bg-teal-950/20 text-teal-200'
+                : connectionStatus === 'connecting'
+                  ? 'border-amber-500/30 bg-amber-950/20 text-amber-200 animate-pulse'
+                  : 'border-red-500/30 bg-red-950/20 text-red-200'
+              : 'border-zinc-700/60 bg-zinc-900/50 text-zinc-200'
+          }`}>
             <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Data source</p>
-            <p className="font-medium text-zinc-200">Live Firebase</p>
-            <p className="text-[10px] text-zinc-500">Listening for live ESP32 node telemetry</p>
+            <div className="flex items-center justify-end gap-1.5 mt-0.5">
+              {feedMode === 'websocket' && (
+                <span className="relative flex h-2 w-2">
+                  {connectionStatus === 'connected' && (
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-400 opacity-75" />
+                  )}
+                  {connectionStatus === 'connecting' && (
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                  )}
+                  <span className={`relative inline-flex h-2 w-2 rounded-full ${
+                    connectionStatus === 'connected'
+                      ? 'bg-teal-400'
+                      : connectionStatus === 'connecting'
+                        ? 'bg-amber-400'
+                        : 'bg-red-500'
+                  }`} />
+                </span>
+              )}
+              <p className="font-semibold tracking-tight">
+                {feedMode === 'websocket'
+                  ? connectionStatus === 'connected'
+                    ? 'Live Gateway (WS)'
+                    : connectionStatus === 'connecting'
+                      ? 'Connecting...'
+                      : 'Gateway Offline'
+                  : 'Simulated Data'}
+              </p>
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-0.5">
+              {feedMode === 'websocket'
+                ? connectionStatus === 'connected'
+                  ? 'Streaming live node telemetry'
+                  : connectionStatus === 'connecting'
+                    ? 'Reconnecting to stream...'
+                    : 'Gateway disconnected'
+                : 'Local simulation active'}
+            </p>
           </div>
         </div>
       </header>
