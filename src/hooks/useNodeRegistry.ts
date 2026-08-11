@@ -61,9 +61,8 @@ export function useNodeRegistry() {
 
         setNodes(currentNodes)
       } else {
-        // Seed default nodes on initial load if database nodes/ path is empty
+        // Seed default node metadata if database nodes/ path is empty
         const initialNodes: Record<string, any> = {}
-        const initialReadings: Record<string, any> = {}
         const now = Date.now()
 
         DEFAULT_NODES.forEach((node) => {
@@ -75,19 +74,9 @@ export function useNodeRegistry() {
             online: false,
             updatedAt: now,
           }
-          initialReadings[node.id] = {
-            deviceId: node.id,
-            label: node.label,
-            magnitudeMmS: 0,
-            frequencyHz: 0,
-            vibrationDetected: false,
-            position: posObj,
-            updatedAt: now,
-          }
         })
 
         set(ref(db, 'nodes'), initialNodes).catch(console.error)
-        set(ref(db, 'readings'), initialReadings).catch(console.error)
         setNodes(DEFAULT_NODES)
       }
     })
@@ -104,7 +93,7 @@ export function useNodeRegistry() {
         online: true,
       }
 
-      // 1. Immediately update local state
+      // 1. Immediately update local React state for instantaneous UI response
       setNodes((prev) => {
         if (prev.some((n) => n.id === payload.id)) {
           return prev.map((n) => (n.id === payload.id ? newNode : n))
@@ -118,7 +107,7 @@ export function useNodeRegistry() {
       }
       const now = Date.now()
 
-      // 2. Write to top-level `nodes/<id>` in Firebase RTDB
+      // 2. Write node metadata to top-level `nodes/<id>` in Firebase RTDB
       set(ref(db, `nodes/${payload.id}`), {
         deviceId: payload.id,
         label: payload.label,
@@ -127,18 +116,9 @@ export function useNodeRegistry() {
         updatedAt: now,
       }).catch((err) => console.error('[Firebase] Failed to write nodes/', err))
 
-      // 3. Write baseline record to `readings/<id>` in Firebase RTDB
-      set(ref(db, `readings/${payload.id}`), {
-        deviceId: payload.id,
-        label: payload.label,
-        magnitudeMmS: 0,
-        frequencyHz: 0,
-        vibrationDetected: false,
-        position: posObj,
-        updatedAt: now,
-      }).catch((err) => console.error('[Firebase] Failed to write readings/', err))
+      // Note: We do NOT overwrite `readings/<id>` here so live telemetry from ESP32 sensors is never wiped out.
 
-      // 4. Save under user's node list if authenticated
+      // 3. Save under user's node list if authenticated
       if (user) {
         set(ref(db, `users/${user.uid}/nodes/${payload.id}`), {
           label: payload.label,
@@ -155,9 +135,8 @@ export function useNodeRegistry() {
       // 1. Immediately update local state so UI updates instantly
       setNodes((prev) => prev.filter((n) => n.id !== id))
 
-      // 2. Remove node from top-level `nodes/<id>` and `readings/<id>` in Firebase RTDB
+      // 2. Remove node metadata from top-level `nodes/<id>` in Firebase RTDB
       remove(ref(db, `nodes/${id}`)).catch((err) => console.error('[Firebase] Failed to remove nodes/', err))
-      remove(ref(db, `readings/${id}`)).catch((err) => console.error('[Firebase] Failed to remove readings/', err))
 
       // 3. Remove from user node list if authenticated
       if (user) {
