@@ -28,10 +28,10 @@ function NodeCard({
 }) {
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const isOnline = r ? Date.now() - r.updatedAt < 30000 : false
-  // A node is "active" only when the firmware reports vibrationDetected = true
-  const isActive = isOnline && (r?.vibrationDetected ?? false)
   const mag = r?.magnitudeMmS ?? 0
   const freq = r?.frequencyHz ?? 0
+  // Active vibrating state if explicitly set to true OR if magnitude >= 0.1 mm/s while online
+  const isActive = isOnline && (r?.vibrationDetected ?? mag >= 0.1)
   const dist = distanceToEstimate(n.position, estimate)
   const radial = displayRadialBearing(n.position, r, estimate)
   const bar = Math.min(100, (mag / 4) * 100)
@@ -39,30 +39,46 @@ function NodeCard({
 
   const barColor =
     mag >= 2.8
-      ? 'from-red-600 to-red-400'
+      ? 'from-red-600 to-red-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
       : mag >= 1.6
-        ? 'from-amber-600 to-amber-400'
-        : 'from-teal-600 to-amber-400'
+        ? 'from-amber-600 to-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+        : 'from-teal-600 to-emerald-400 shadow-[0_0_8px_rgba(45,212,191,0.3)]'
+
+  const magTextColor =
+    mag >= 2.8
+      ? 'text-red-400 font-bold'
+      : mag >= 1.6
+        ? 'text-amber-300 font-semibold'
+        : 'text-teal-300 font-medium'
 
   return (
-    <li className="rounded-xl border border-zinc-800/60 bg-zinc-950/50 px-3 py-3 transition hover:border-zinc-700 active:border-zinc-600">
+    <li className={`rounded-xl border px-3 py-3 transition ${
+      isActive
+        ? 'border-teal-500/40 bg-zinc-950/80 shadow-[0_0_12px_rgba(20,184,166,0.15)]'
+        : 'border-zinc-800/60 bg-zinc-950/50 hover:border-zinc-700'
+    }`}>
       {/* Row 1: status + label + remove */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span
-              className={`h-2 w-2 shrink-0 rounded-full ${
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
                 isActive
-                  ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse'
+                  ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)] animate-pulse'
                   : isOnline
                     ? 'bg-zinc-400'
                     : 'bg-zinc-600'
               }`}
               title={
-                isActive ? 'Vibration detected' : isOnline ? 'Online — no vibration' : 'No telemetry in 30s'
+                isActive ? 'Vibration actively detected' : isOnline ? 'Online — baseline' : 'No telemetry in 30s'
               }
             />
             <p className="truncate text-sm font-semibold text-zinc-100">{n.label}</p>
+            {isActive && (
+              <span className="rounded-full bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-400 animate-pulse">
+                Vibrating
+              </span>
+            )}
           </div>
           <p className="mt-0.5 font-mono text-[11px] text-zinc-500">
             Geophone ·{' '}
@@ -75,7 +91,7 @@ function NodeCard({
                     : 'text-zinc-600'
               }
             >
-              {isActive ? 'vibrating' : isOnline ? 'online' : 'offline'}
+              {isActive ? 'vibration active' : isOnline ? 'online' : 'offline'}
             </span>
           </p>
           {radial != null && (
@@ -142,29 +158,40 @@ function NodeCard({
         </div>
       </div>
 
-      {/* Row 2: magnitude + frequency */}
-      <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+      {/* Row 2: magnitude + frequency metrics */}
+      <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs border-t border-zinc-800/40 pt-2">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-            Vibration
+            Vibration Peak
           </p>
-          <p className="mt-0.5 font-mono text-teal-300">{mag.toFixed(3)} mm/s</p>
+          <p className={`mt-0.5 font-mono text-sm ${magTextColor}`}>
+            {mag.toFixed(3)} <span className="text-[10px] font-normal text-zinc-500">mm/s</span>
+          </p>
         </div>
         <div>
           <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
             Frequency
           </p>
-          <p className="mt-0.5 font-mono text-cyan-300">{freq.toFixed(1)} Hz</p>
+          <p className="mt-0.5 font-mono text-sm text-cyan-300 font-medium">
+            {freq.toFixed(1)} <span className="text-[10px] font-normal text-zinc-500">Hz</span>
+          </p>
         </div>
       </div>
 
-      {/* Bar */}
-      <div className="mt-2 h-1 overflow-hidden rounded-full bg-zinc-800">
-        <div
-          className={`h-full rounded-full bg-gradient-to-r transition-[width] duration-300 ${barColor}`}
-          style={{ width: `${bar}%` }}
-          title={`${bar.toFixed(0)}% of 4 mm/s reference`}
-        />
+      {/* Vibration intensity bar */}
+      <div className="mt-2.5 space-y-1">
+        <div className="flex justify-between items-center text-[9px] text-zinc-500 font-mono">
+          <span>0 mm/s</span>
+          <span className="text-zinc-400">{bar.toFixed(0)}% ref</span>
+          <span>4.0 mm/s</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-zinc-900 border border-zinc-800">
+          <div
+            className={`h-full rounded-full bg-gradient-to-r transition-[width] duration-300 ${barColor}`}
+            style={{ width: `${Math.max(4, bar)}%` }}
+            title={`Vibration magnitude level (${bar.toFixed(0)}% of 4 mm/s)`}
+          />
+        </div>
       </div>
     </li>
   )
@@ -308,7 +335,7 @@ function BottomSheet({
       </div>
 
       {/* Scrollable node list */}
-      <ul className="flex flex-col gap-2 overflow-y-auto px-4 pb-2 pt-1">
+      <ul className="flex flex-col gap-2.5 overflow-y-auto px-4 pb-2 pt-1">
         {nodes.length === 0 && (
           <li className="py-10 text-center text-sm text-zinc-600">
             No geophones yet. Tap{' '}
@@ -329,7 +356,7 @@ function BottomSheet({
   )
 }
 
-/* ── Desktop sidebar (unchanged) ──────────────────────────────── */
+/* ── Desktop sidebar ──────────────────────────────────────────── */
 function Sidebar({
   nodes,
   readings,
@@ -341,21 +368,16 @@ function Sidebar({
     <aside className="hidden md:flex max-h-none flex-col gap-3 overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 backdrop-blur-md">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
-          Geophones
+          Geophones & Telemetry
         </h2>
         <span className="max-w-[10rem] rounded-full bg-zinc-800 px-2 py-0.5 text-right font-mono text-[10px] leading-tight text-teal-400">
           {meshEdgeCount} mesh links
         </span>
       </div>
       <p className="text-[10px] leading-relaxed text-zinc-600">
-        Each station is a{' '}
-        <span className="text-zinc-500">geophone</span> reporting magnitude,
-        frequency, and{' '}
-        <span className="text-zinc-500">radial bearing</span> (° from north
-        toward the source). Teal rays on the map point from each geophone to
-        the fused estimate.
+        Each geophone station streams peak vibration magnitude (mm/s), frequency (Hz), and radial bearing.
       </p>
-      <ul className="flex flex-col gap-2 overflow-y-auto pr-1">
+      <ul className="flex flex-col gap-2.5 overflow-y-auto pr-1">
         {nodes.map((n) => (
           <NodeCard
             key={n.id}
@@ -381,9 +403,8 @@ export function NodeSidebar({
   networkMaxMag,
   alertLevel,
 }: Props) {
-  return (
-    <>
-      {/* Mobile bottom sheet */}
+  if (variant === 'sheet') {
+    return (
       <BottomSheet
         nodes={nodes}
         readings={readings}
@@ -393,16 +414,16 @@ export function NodeSidebar({
         networkMaxMag={networkMaxMag}
         alertLevel={alertLevel}
       />
-      {/* Desktop sidebar */}
-      {variant === 'sidebar' && (
-        <Sidebar
-          nodes={nodes}
-          readings={readings}
-          estimate={estimate}
-          meshEdgeCount={meshEdgeCount}
-          onRemove={onRemove}
-        />
-      )}
-    </>
+    )
+  }
+
+  return (
+    <Sidebar
+      nodes={nodes}
+      readings={readings}
+      estimate={estimate}
+      meshEdgeCount={meshEdgeCount}
+      onRemove={onRemove}
+    />
   )
 }

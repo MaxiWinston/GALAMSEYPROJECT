@@ -435,6 +435,7 @@ export function DashboardPage() {
         estimate={triangulation.estimate}
         meshEdgeCount={meshEdges.length}
         onRemove={removeNode}
+        variant="sheet"
         networkMaxMag={networkMaxMag}
         alertLevel={alertLevel}
       />

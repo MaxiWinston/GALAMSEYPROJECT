@@ -30,10 +30,15 @@ function resolveDeviceId(payload: Record<string, unknown>): string | null {
 
 /**
  * Coerce vibrationDetected from the wire (bool, 0/1, "true"/"false").
+ * If omitted/undefined, defaults to true if magnitudeMmS >= 0.1 mm/s.
  */
-function coerceBool(v: unknown): boolean {
+function coerceBool(v: unknown, magnitudeMmS?: number): boolean {
   if (typeof v === 'boolean') return v
   if (v === 1 || v === '1' || v === 'true') return true
+  if (v === 0 || v === '0' || v === 'false') return false
+  if (typeof magnitudeMmS === 'number') {
+    return magnitudeMmS >= 0.1
+  }
   return false
 }
 
@@ -122,7 +127,7 @@ export function useSeismicMesh({ nodes }: Props) {
             nodeId: deviceId,
             magnitudeMmS,
             frequencyHz,
-            vibrationDetected: coerceBool(raw.vibrationDetected),
+            vibrationDetected: coerceBool(raw.vibrationDetected, magnitudeMmS),
             radialBearingDeg:
               typeof raw.radialBearingDeg === 'number'
                 ? raw.radialBearingDeg
@@ -213,7 +218,7 @@ export function useSeismicMesh({ nodes }: Props) {
                 nodeId: resolvedId,
                 magnitudeMmS: r.magnitudeMmS,
                 frequencyHz: r.frequencyHz,
-                vibrationDetected: coerceBool(r.vibrationDetected),
+                vibrationDetected: coerceBool(r.vibrationDetected, r.magnitudeMmS),
                 radialBearingDeg: r.radialBearingDeg,
                 rssi: r.rssi,
                 // Use the Firebase ServerTimestamp directly (already unix ms)
@@ -267,9 +272,9 @@ export function useSeismicMesh({ nodes }: Props) {
       .map((n) => {
         const r = readings.get(n.id)
         if (!r) return null
-        // Only use fresh readings (< 30 s) where vibration was detected
+        // Only use fresh readings (< 30 s) with positive vibration magnitude
         if (now - r.updatedAt > 30_000) return null
-        if (!r.vibrationDetected) return null
+        if (r.magnitudeMmS <= 0.05) return null
         return { position: n.position, magnitude: r.magnitudeMmS }
       })
       .filter((x): x is { position: LatLng; magnitude: number } => x !== null)
@@ -288,7 +293,7 @@ export function useSeismicMesh({ nodes }: Props) {
     let m = 0
     const now = Date.now()
     for (const r of readings.values()) {
-      if (now - r.updatedAt <= 30_000 && r.vibrationDetected) {
+      if (now - r.updatedAt <= 30_000 && r.magnitudeMmS > 0) {
         m = Math.max(m, r.magnitudeMmS)
       }
     }
