@@ -41,14 +41,15 @@ export function useNodeRegistry() {
   const [nodes, setNodes] = useState<SensorNode[]>(DEFAULT_NODES)
 
   useEffect(() => {
-    const unsubscribers: (() => void)[] = []
-
-    // 1. Listen to top-level `nodes/` in Firebase RTDB
+    // Top-level `nodes/` in Firebase RTDB is the single authoritative source of truth
     const topNodesRef = ref(db, 'nodes')
-    const unsubTopNodes = onValue(topNodesRef, (snapshot) => {
+
+    const unsubscribe = onValue(topNodesRef, (snapshot) => {
       const val = snapshot.val()
-      if (val && typeof val === 'object') {
-        const topList: SensorNode[] = Object.entries(val).map(([id, item]: [string, any]) => {
+
+      if (val && typeof val === 'object' && Object.keys(val).length > 0) {
+        // Build exact list from Firebase nodes/ tree — deleted nodes are completely excluded
+        const currentNodes: SensorNode[] = Object.entries(val).map(([id, item]: [string, any]) => {
           const fallback = DEFAULT_NODES.find((d) => d.id === id)?.position ?? [6.1050, -0.5850]
           return {
             id,
@@ -58,83 +59,41 @@ export function useNodeRegistry() {
           }
         })
 
-        if (topList.length > 0) {
-          setNodes((prev) => {
-            const nextMap = new Map(prev.map((n) => [n.id, n]))
-            for (const tn of topList) {
-              nextMap.set(tn.id, tn)
-            }
-            return Array.from(nextMap.values())
-          })
-        }
-      }
-    })
-    unsubscribers.push(unsubTopNodes)
+        setNodes(currentNodes)
+      } else {
+        // Seed default nodes on initial load if database nodes/ path is empty
+        const initialNodes: Record<string, any> = {}
+        const initialReadings: Record<string, any> = {}
+        const now = Date.now()
 
-    // 2. Listen to top-level `readings/` in Firebase RTDB (catches sensors that post readings directly)
-    const topReadingsRef = ref(db, 'readings')
-    const unsubTopReadings = onValue(topReadingsRef, (snapshot) => {
-      const val = snapshot.val()
-      if (val && typeof val === 'object') {
-        const readingNodes: SensorNode[] = Object.entries(val).map(([id, item]: [string, any]) => {
-          const fallback = DEFAULT_NODES.find((d) => d.id === id)?.position ?? [6.1050, -0.5850]
-          return {
-            id,
-            label: item.nodeLabel ?? item.label ?? `GEO-Node-${id}`,
-            position: parsePosition(item.position, fallback),
-            online: true,
+        DEFAULT_NODES.forEach((node) => {
+          const posObj = { lat: node.position[0], lng: node.position[1] }
+          initialNodes[node.id] = {
+            deviceId: node.id,
+            label: node.label,
+            position: posObj,
+            online: false,
+            updatedAt: now,
+          }
+          initialReadings[node.id] = {
+            deviceId: node.id,
+            label: node.label,
+            magnitudeMmS: 0,
+            frequencyHz: 0,
+            vibrationDetected: false,
+            position: posObj,
+            updatedAt: now,
           }
         })
 
-        if (readingNodes.length > 0) {
-          setNodes((prev) => {
-            const nextMap = new Map(prev.map((n) => [n.id, n]))
-            for (const rn of readingNodes) {
-              if (!nextMap.has(rn.id)) {
-                nextMap.set(rn.id, rn)
-              }
-            }
-            return Array.from(nextMap.values())
-          })
-        }
+        set(ref(db, 'nodes'), initialNodes).catch(console.error)
+        set(ref(db, 'readings'), initialReadings).catch(console.error)
+        setNodes(DEFAULT_NODES)
       }
     })
-    unsubscribers.push(unsubTopReadings)
 
-    // 3. Listen to user-specific node list if authenticated
-    if (user) {
-      const userNodesRef = ref(db, `users/${user.uid}/nodes`)
-      const unsubUserNodes = onValue(userNodesRef, (snapshot) => {
-        const val = snapshot.val()
-        if (val && typeof val === 'object') {
-          const userList: SensorNode[] = Object.entries(val).map(([id, item]: [string, any]) => {
-            const fallback = DEFAULT_NODES.find((d) => d.id === id)?.position ?? [6.1050, -0.5850]
-            return {
-              id,
-              label: item.label ?? `GEO-Node-${id}`,
-              position: parsePosition(item.position, fallback),
-              online: item.online ?? true,
-            }
-          })
-
-          if (userList.length > 0) {
-            setNodes((prev) => {
-              const nextMap = new Map(prev.map((n) => [n.id, n]))
-              for (const un of userList) {
-                nextMap.set(un.id, un)
-              }
-              return Array.from(nextMap.values())
-            })
-          }
-        }
-      })
-      unsubscribers.push(unsubUserNodes)
-    }
-
-    return () => {
-      for (const unsub of unsubscribers) unsub()
-    }
-  }, [user])
+    return () => unsubscribe()
+  }, [])
 
   const addNode = useCallback(
     (payload: AddNodePayload) => {
@@ -145,7 +104,7 @@ export function useNodeRegistry() {
         online: true,
       }
 
-      // 1. Instantly update local React state
+      // 1. Immediately update local state
       setNodes((prev) => {
         if (prev.some((n) => n.id === payload.id)) {
           return prev.map((n) => (n.id === payload.id ? newNode : n))
@@ -153,40 +112,37 @@ export function useNodeRegistry() {
         return [...prev, newNode]
       })
 
-      // Clean lat/lng object for Firebase RTDB
-      const positionObj = {
+      const posObj = {
         lat: payload.position[0],
         lng: payload.position[1],
       }
+      const now = Date.now()
 
       // 2. Write to top-level `nodes/<id>` in Firebase RTDB
-      const topNodeRef = ref(db, `nodes/${payload.id}`)
-      set(topNodeRef, {
+      set(ref(db, `nodes/${payload.id}`), {
         deviceId: payload.id,
         label: payload.label,
-        position: positionObj,
+        position: posObj,
         online: true,
-        updatedAt: Date.now(),
+        updatedAt: now,
       }).catch((err) => console.error('[Firebase] Failed to write nodes/', err))
 
-      // 3. Write baseline telemetry record to top-level `readings/<id>` in Firebase RTDB
-      const topReadingRef = ref(db, `readings/${payload.id}`)
-      set(topReadingRef, {
+      // 3. Write baseline record to `readings/<id>` in Firebase RTDB
+      set(ref(db, `readings/${payload.id}`), {
         deviceId: payload.id,
         label: payload.label,
         magnitudeMmS: 0,
         frequencyHz: 0,
         vibrationDetected: false,
-        position: positionObj,
-        updatedAt: Date.now(),
+        position: posObj,
+        updatedAt: now,
       }).catch((err) => console.error('[Firebase] Failed to write readings/', err))
 
-      // 4. Save to user's personalized node list if authenticated
+      // 4. Save under user's node list if authenticated
       if (user) {
-        const userNodeRef = ref(db, `users/${user.uid}/nodes/${payload.id}`)
-        set(userNodeRef, {
+        set(ref(db, `users/${user.uid}/nodes/${payload.id}`), {
           label: payload.label,
-          position: positionObj,
+          position: posObj,
           online: true,
         }).catch((err) => console.error('[Firebase] Failed to write users/nodes/', err))
       }
@@ -196,17 +152,16 @@ export function useNodeRegistry() {
 
   const removeNode = useCallback(
     (id: string) => {
-      // 1. Remove from local state
+      // 1. Immediately update local state so UI updates instantly
       setNodes((prev) => prev.filter((n) => n.id !== id))
 
-      // 2. Remove from top-level `nodes/<id>` and `readings/<id>` in Firebase RTDB
-      remove(ref(db, `nodes/${id}`)).catch(console.error)
-      remove(ref(db, `readings/${id}`)).catch(console.error)
+      // 2. Remove node from top-level `nodes/<id>` and `readings/<id>` in Firebase RTDB
+      remove(ref(db, `nodes/${id}`)).catch((err) => console.error('[Firebase] Failed to remove nodes/', err))
+      remove(ref(db, `readings/${id}`)).catch((err) => console.error('[Firebase] Failed to remove readings/', err))
 
       // 3. Remove from user node list if authenticated
       if (user) {
-        const userNodeRef = ref(db, `users/${user.uid}/nodes/${id}`)
-        remove(userNodeRef).catch(console.error)
+        remove(ref(db, `users/${user.uid}/nodes/${id}`)).catch((err) => console.error('[Firebase] Failed to remove users/nodes/', err))
       }
     },
     [user],

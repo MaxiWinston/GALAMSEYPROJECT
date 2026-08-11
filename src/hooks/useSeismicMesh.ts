@@ -212,17 +212,18 @@ export function useSeismicMesh({ nodes }: Props) {
       const readingsRef = ref(db, 'readings')
       const unsubReadings = onValue(readingsRef, (snapshot) => {
         const val = snapshot.val()
-        if (!val || typeof val !== 'object') return
-        setReadings((prev) => {
-          const next = new Map(prev)
-          for (const [key, item] of Object.entries(val)) {
-            if (item && typeof item === 'object') {
-              const parsed = parseReading(item as Record<string, any>, key)
-              if (parsed) next.set(parsed.nodeId, parsed)
-            }
+        if (!val || typeof val !== 'object') {
+          setReadings(new Map())
+          return
+        }
+        const next = new Map<string, NodeReading>()
+        for (const [key, item] of Object.entries(val)) {
+          if (item && typeof item === 'object') {
+            const parsed = parseReading(item as Record<string, any>, key)
+            if (parsed) next.set(parsed.nodeId, parsed)
           }
-          return next
-        })
+        }
+        setReadings(next)
       })
       unsubscribers.push(unsubReadings)
 
