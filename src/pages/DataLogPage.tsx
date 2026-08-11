@@ -37,8 +37,8 @@ function magTextColor(mag: number) {
 function LogCard({ row }: { row: ReturnType<typeof useTelemetry>['logRows'][number] }) {
   const bar = Math.min(100, (row.magnitudeMmS / 4) * 100)
   const classification = useMemo(
-    () => classifyVibration(row.magnitudeMmS, row.frequencyHz),
-    [row.magnitudeMmS, row.frequencyHz],
+    () => classifyVibration(row.magnitudeMmS, row.frequencyHz, row.vibrationDetected),
+    [row.magnitudeMmS, row.frequencyHz, row.vibrationDetected],
   )
   return (
     <li className="rounded-xl border border-zinc-800/60 bg-zinc-900/60 px-4 py-3.5 space-y-2.5 transition hover:border-zinc-700 active:border-zinc-600">

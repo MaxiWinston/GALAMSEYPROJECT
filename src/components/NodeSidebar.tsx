@@ -39,8 +39,8 @@ function NodeCard({
   const isPendingRemove = confirmId === n.id
 
   const classification = useMemo(
-    () => classifyVibration(mag, freq, r?.vibrationRmsMv),
-    [mag, freq, r?.vibrationRmsMv],
+    () => classifyVibration(mag, freq, r?.vibrationDetected, r?.vibrationRmsMv),
+    [mag, freq, r?.vibrationDetected, r?.vibrationRmsMv],
   )
 
   const barColor =

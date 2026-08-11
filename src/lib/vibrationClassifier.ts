@@ -23,34 +23,36 @@ export type SourceClassification = {
 
 /**
  * Classify seismic activity based on peak particle velocity (magnitude in mm/s),
- * dominant peak spectral frequency (Hz), and optional electrical signal voltage (mV).
+ * dominant peak spectral frequency (Hz), and vibrationDetected flag.
  *
- * Calibration parameters derived from geophone seismic vibration signatures:
- * 1. Ambient Ground Noise: mag < 0.05 mm/s
- * 2. Human Footsteps / Walking: mag 0.05-0.35 mm/s, freq 1.0-8.0 Hz
- * 3. Light Vehicle / Car: mag 0.35-0.90 mm/s, freq 12.0-25.0 Hz
- * 4. Manual Digging / Shoveling: mag 0.90-1.60 mm/s, freq 5.0-15.0 Hz
- * 5. Agricultural Tractor: mag 1.60-2.80 mm/s, freq 18.0-35.0 Hz
- * 6. Heavy Articulated Truck: mag 2.80-4.50 mm/s, freq 10.0-28.0 Hz
- * 7. Bulldozer / Excavator Heavy Mining: mag > 4.50 mm/s (or heavy low-mid freq)
+ * Calibration rules:
+ * 1. Idle / Baseline (vibrationDetected = false or mag < 0.10 mm/s) -> Ambient Ground Noise
+ * 2. Human Footsteps / Walking: mag 0.10-0.35 mm/s, freq 1.0-9.5 Hz
+ * 3. Light Vehicle / Car: mag 0.35-0.90 mm/s, freq 10.0-26.0 Hz
+ * 4. Manual Digging / Shoveling: mag 0.90-1.60 mm/s, freq 5.0-17.5 Hz
+ * 5. Agricultural Tractor: mag 1.60-2.80 mm/s, freq 17.5-40.0 Hz
+ * 6. Heavy Articulated Truck: mag 2.80-4.50 mm/s, freq 10.0-30.0 Hz
+ * 7. Bulldozer / Heavy Excavator Mining: mag > 4.50 mm/s
  */
 export function classifyVibration(
   magnitudeMmS: number,
   frequencyHz: number,
+  vibrationDetected?: boolean,
   _vibrationRmsMv?: number,
 ): SourceClassification {
   const mag = Math.max(0, magnitudeMmS)
   const freq = Math.max(0, frequencyHz)
 
-  // 1. Ambient Ground Noise (< 0.05 mm/s)
-  if (mag < 0.05) {
+  // 1. Idle / Ambient Ground Noise
+  // If vibrationDetected is explicitly false OR magnitude is under baseline threshold (< 0.10 mm/s)
+  if (vibrationDetected === false || mag < 0.10) {
     return {
       category: 'ambient',
       label: 'Ambient Ground Noise',
-      shortLabel: 'Ambient',
+      shortLabel: 'Ambient / Idle',
       threatLevel: 'nominal',
       confidence: 98,
-      description: 'Quiescent baseline ground motion. No activity detected.',
+      description: 'Quiescent baseline ground motion. Station is idle.',
       iconName: 'wave',
       colorClass: 'text-zinc-400',
       badgeBg: 'bg-zinc-900/60',
@@ -59,7 +61,7 @@ export function classifyVibration(
     }
   }
 
-  // 2. Human Footsteps / Walking (0.05 - 0.35 mm/s, low freq 1-9 Hz)
+  // 2. Human Footsteps / Walking (0.10 - 0.35 mm/s, low freq 1-9.5 Hz)
   if (mag <= 0.35 && (freq === 0 || freq <= 9.5)) {
     const conf = Math.min(96, Math.round(75 + (0.35 - mag) * 50))
     return {
@@ -94,7 +96,7 @@ export function classifyVibration(
     }
   }
 
-  // 4. Manual Digging / Shoveling (0.90 - 1.60 mm/s, freq 5-17 Hz)
+  // 4. Manual Digging / Shoveling (0.90 - 1.60 mm/s, freq 5-17.5 Hz)
   if (mag <= 1.60 && freq <= 17.5) {
     return {
       category: 'digging',
@@ -111,7 +113,7 @@ export function classifyVibration(
     }
   }
 
-  // 5. Agricultural Tractor (1.60 - 2.80 mm/s, freq 18-40 Hz)
+  // 5. Agricultural Tractor (1.60 - 2.80 mm/s, freq 17.5-40 Hz)
   if (mag <= 2.80 && freq >= 17.5) {
     return {
       category: 'tractor',
@@ -165,10 +167,11 @@ export function classifyVibration(
  * Fuse multi-node network readings to generate a unified network-wide threat classification.
  */
 export function classifyNetworkVibration(
-  readingsMap: Map<string, { magnitudeMmS: number; frequencyHz: number; vibrationRmsMv?: number; updatedAt: number }>,
+  readingsMap: Map<string, { magnitudeMmS: number; frequencyHz: number; vibrationDetected?: boolean; vibrationRmsMv?: number; updatedAt: number }>,
 ): SourceClassification {
   let maxMag = 0
   let matchedFreq = 0
+  let matchedDetected = false
   let matchedRms = 0
   const now = Date.now()
 
@@ -176,9 +179,10 @@ export function classifyNetworkVibration(
     if (now - r.updatedAt <= 30_000 && r.magnitudeMmS > maxMag) {
       maxMag = r.magnitudeMmS
       matchedFreq = r.frequencyHz
+      matchedDetected = r.vibrationDetected ?? r.magnitudeMmS >= 0.1
       matchedRms = r.vibrationRmsMv ?? 0
     }
   }
 
-  return classifyVibration(maxMag, matchedFreq, matchedRms)
+  return classifyVibration(maxMag, matchedFreq, matchedDetected, matchedRms)
 }
