@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { NotificationCenter } from './NotificationCenter'
 
 /* ── Desktop top nav link styles ──────────────────────────────── */
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -160,22 +161,26 @@ export function AppNav() {
             </div>
           </div>
 
-          {user && (
-            <div className="flex items-center gap-4">
-              <div className="flex flex-col items-end text-right">
-                <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
-                  Active Account
-                </span>
-                <span className="text-xs font-mono text-zinc-300">{user.email}</span>
+          <div className="flex items-center gap-3">
+            <NotificationCenter />
+
+            {user && (
+              <div className="flex items-center gap-4">
+                <div className="flex flex-col items-end text-right">
+                  <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">
+                    Active Account
+                  </span>
+                  <span className="text-xs font-mono text-zinc-300">{user.email}</span>
+                </div>
+                <button
+                  onClick={() => logOut().catch(console.error)}
+                  className="rounded-lg border border-zinc-800 hover:border-red-500/30 hover:bg-red-950/10 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-red-300 transition active:scale-[0.97]"
+                >
+                  Sign Out
+                </button>
               </div>
-              <button
-                onClick={() => logOut().catch(console.error)}
-                className="rounded-lg border border-zinc-800 hover:border-red-500/30 hover:bg-red-950/10 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-red-300 transition active:scale-[0.97]"
-              >
-                Sign Out
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </nav>
 

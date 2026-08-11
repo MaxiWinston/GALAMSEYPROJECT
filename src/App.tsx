@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppNav } from './components/AppNav'
 import { TelemetryProvider } from './context/TelemetryProvider'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { NotificationProvider } from './context/NotificationContext'
 import { DashboardPage } from './pages/DashboardPage'
 import { DataLogPage } from './pages/DataLogPage'
 import { LoginPage } from './pages/LoginPage'
@@ -57,9 +58,11 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <TelemetryProvider>
-        <AppContent />
-      </TelemetryProvider>
+      <NotificationProvider>
+        <TelemetryProvider>
+          <AppContent />
+        </TelemetryProvider>
+      </NotificationProvider>
     </AuthProvider>
   )
 }

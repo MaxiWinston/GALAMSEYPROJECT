@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNodeRegistry } from '../hooks/useNodeRegistry'
 import { useSeismicMesh } from '../hooks/useSeismicMesh'
+import { useNotifications } from './NotificationContext'
 import {
   clearTelemetryLogStorage,
   loadTelemetryLog,
@@ -13,6 +14,7 @@ import { TelemetryContext, type TelemetryContextValue } from './telemetryContext
 export function TelemetryProvider({ children }: { children: ReactNode }) {
   const { nodes, addNode, removeNode } = useNodeRegistry()
   const mesh = useSeismicMesh({ nodes })
+  const { processReadingAlert } = useNotifications()
   const [logRows, setLogRows] = useState<TelemetryLogRow[]>(() => loadTelemetryLog())
   const batchSeq = useRef(0)
 
@@ -30,6 +32,12 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
       if (!n.online) continue
       const r = readings.get(n.id)
       if (!r) continue
+
+      // Process real-time alert trigger if vibration threshold is reached
+      if (r.vibrationDetected || r.magnitudeMmS >= 0.9) {
+        processReadingAlert(n.id, n.label, r.magnitudeMmS, r.frequencyHz)
+      }
+
       batch.push({
         id: `${sampleTime}-${bid}-${n.id}`,
         sampleTime,

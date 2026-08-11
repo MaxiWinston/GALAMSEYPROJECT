@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AddNodeModal } from '../components/AddNodeModal'
 import { SeismicMap } from '../components/SeismicMap'
 import { NodeSidebar } from '../components/NodeSidebar'
+import { NotificationCenter } from '../components/NotificationCenter'
 import { useTelemetry } from '../context/telemetryContext'
 import { classifyNetworkVibration } from '../lib/vibrationClassifier'
 import type { LatLng } from '../types'
@@ -335,10 +336,11 @@ export function DashboardPage() {
             Galamsey Monitor
           </h1>
         </div>
-        {/* Mini connection dot */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Mini connection dot & Notification Center */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <NotificationCenter />
           <span
-            className={`h-2 w-2 rounded-full ${
+            className={`h-2.5 w-2.5 rounded-full ${
               feedMode === 'websocket'
                 ? connectionStatus === 'connected'
                   ? 'bg-teal-400 animate-pulse'
