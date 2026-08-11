@@ -56,21 +56,65 @@ export function useNodeRegistry() {
   }, [user])
 
   const addNode = useCallback((payload: AddNodePayload) => {
-    if (!user) return
-    if (nodes.some((n) => n.id === payload.id)) return
-
-    const nodeRef = ref(db, `users/${user.uid}/nodes/${payload.id}`)
-    set(nodeRef, {
+    const newNode: SensorNode = {
+      id: payload.id,
       label: payload.label,
       position: payload.position,
       online: true,
+    }
+
+    // 1. Immediately update local state
+    setNodes((prev) => {
+      if (prev.some((n) => n.id === payload.id)) {
+        return prev.map((n) => (n.id === payload.id ? newNode : n))
+      }
+      return [...prev, newNode]
+    })
+
+    // 2. Write to top-level `nodes/<id>` in Firebase RTDB
+    const topNodeRef = ref(db, `nodes/${payload.id}`)
+    set(topNodeRef, {
+      deviceId: payload.id,
+      label: payload.label,
+      position: payload.position,
+      online: true,
+      updatedAt: Date.now(),
     }).catch(console.error)
-  }, [user, nodes])
+
+    // 3. Write initial baseline document to `readings/<id>` if missing
+    const topReadingRef = ref(db, `readings/${payload.id}`)
+    set(topReadingRef, {
+      deviceId: payload.id,
+      magnitudeMmS: 0,
+      frequencyHz: 0,
+      vibrationDetected: false,
+      updatedAt: Date.now(),
+    }).catch(console.error)
+
+    // 4. Save to user's personalized node list if authenticated
+    if (user) {
+      const userNodeRef = ref(db, `users/${user.uid}/nodes/${payload.id}`)
+      set(userNodeRef, {
+        label: payload.label,
+        position: payload.position,
+        online: true,
+      }).catch(console.error)
+    }
+  }, [user])
 
   const removeNode = useCallback((id: string) => {
-    if (!user) return
-    const nodeRef = ref(db, `users/${user.uid}/nodes/${id}`)
-    remove(nodeRef).catch(console.error)
+    // 1. Remove from local state
+    setNodes((prev) => prev.filter((n) => n.id !== id))
+
+    // 2. Remove from top-level `nodes/<id>` and `readings/<id>` in Firebase
+    remove(ref(db, `nodes/${id}`)).catch(console.error)
+    remove(ref(db, `readings/${id}`)).catch(console.error)
+
+    // 3. Remove from user node list if authenticated
+    if (user) {
+      const userNodeRef = ref(db, `users/${user.uid}/nodes/${id}`)
+      remove(userNodeRef).catch(console.error)
+    }
   }, [user])
 
   return { nodes, addNode, removeNode }
