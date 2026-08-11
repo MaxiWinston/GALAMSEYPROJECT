@@ -3,10 +3,9 @@ import { ref, onValue } from 'firebase/database'
 import { buildKnnMesh, estimateSourceFromMesh } from '../lib/geo'
 import type { LatLng, MeshEdge, NodeReading, SensorNode, TriangulationResult } from '../types'
 
-// Firebase is active when all VITE_FIREBASE_* vars are set
-const FIREBASE_ENABLED =
-  !!import.meta.env.VITE_FIREBASE_API_KEY &&
-  !!import.meta.env.VITE_FIREBASE_DATABASE_URL
+// Firebase Realtime Database is enabled by default (uses firebase.ts fallback config)
+const FIREBASE_ENABLED = true
+const SIMULATION_ENABLED = import.meta.env.VITE_SIMULATE === 'true'
 
 type Props = {
   nodes: SensorNode[]
@@ -272,9 +271,9 @@ export function useSeismicMesh({ nodes }: Props) {
     }
   }, [nodes])
 
-  // ── Simulated feed (no Firebase, no WebSocket) ───────────────────────────────
+  // ── Simulated feed (only active if VITE_SIMULATE=true) ───────────────────────
   useEffect(() => {
-    if (import.meta.env.VITE_WS_URL || FIREBASE_ENABLED) return
+    if (!SIMULATION_ENABLED) return
 
     const id = setInterval(() => {
       const currentNodes = nodesRef.current
