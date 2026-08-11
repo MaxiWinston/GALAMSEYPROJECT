@@ -25,10 +25,10 @@ export type SourceClassification = {
  * Classify seismic activity based on peak particle velocity (magnitude in mm/s),
  * dominant peak spectral frequency (Hz), and vibrationDetected flag.
  *
- * Calibration rules:
- * 1. Idle / Baseline (vibrationDetected = false or mag < 0.10 mm/s) -> Ambient Ground Noise
- * 2. Human Footsteps / Walking: mag 0.10-0.35 mm/s, freq 1.0-9.5 Hz
- * 3. Light Vehicle / Car: mag 0.35-0.90 mm/s, freq 10.0-26.0 Hz
+ * Ground motion calibration thresholds:
+ * 1. Ambient / Idle: mag < 0.35 mm/s (unless low-freq footsteps 1-9.5 Hz) OR vibrationDetected = false
+ * 2. Human Footsteps: mag 0.10-0.35 mm/s, freq 1.0-9.5 Hz
+ * 3. Light Vehicle / Car: mag 0.35-0.90 mm/s, freq >= 10.0 Hz (Requires mag >= 0.35 mm/s)
  * 4. Manual Digging / Shoveling: mag 0.90-1.60 mm/s, freq 5.0-17.5 Hz
  * 5. Agricultural Tractor: mag 1.60-2.80 mm/s, freq 17.5-40.0 Hz
  * 6. Heavy Articulated Truck: mag 2.80-4.50 mm/s, freq 10.0-30.0 Hz
@@ -43,9 +43,8 @@ export function classifyVibration(
   const mag = Math.max(0, magnitudeMmS)
   const freq = Math.max(0, frequencyHz)
 
-  // 1. Idle / Ambient Ground Noise
-  // If vibrationDetected is explicitly false OR magnitude is under baseline threshold (< 0.10 mm/s)
-  if (vibrationDetected === false || mag < 0.10) {
+  // Explicitly idle if vibrationDetected is false
+  if (vibrationDetected === false) {
     return {
       category: 'ambient',
       label: 'Ambient Ground Noise',
@@ -61,8 +60,8 @@ export function classifyVibration(
     }
   }
 
-  // 2. Human Footsteps / Walking (0.10 - 0.35 mm/s, low freq 1-9.5 Hz)
-  if (mag <= 0.35 && (freq === 0 || freq <= 9.5)) {
+  // 1. Human Footsteps / Walking (0.10 - 0.35 mm/s, low freq <= 9.5 Hz)
+  if (mag >= 0.10 && mag <= 0.35 && (freq === 0 || freq <= 9.5)) {
     const conf = Math.min(96, Math.round(75 + (0.35 - mag) * 50))
     return {
       category: 'footsteps',
@@ -79,7 +78,24 @@ export function classifyVibration(
     }
   }
 
-  // 3. Light Vehicle / Car (0.35 - 0.90 mm/s, freq 10-26 Hz)
+  // 2. Low-magnitude Ground Baseline (< 0.35 mm/s) -> ALWAYS Ambient / Idle (Never Vehicle)
+  if (mag < 0.35) {
+    return {
+      category: 'ambient',
+      label: 'Ambient Ground Noise',
+      shortLabel: 'Ambient / Idle',
+      threatLevel: 'nominal',
+      confidence: 98,
+      description: 'Low-level baseline ground movement. No vehicle or machinery active.',
+      iconName: 'wave',
+      colorClass: 'text-zinc-400',
+      badgeBg: 'bg-zinc-900/60',
+      badgeText: 'text-zinc-400',
+      badgeBorder: 'border-zinc-800',
+    }
+  }
+
+  // 3. Light Vehicle / Car (0.35 - 0.90 mm/s, freq >= 10.0 Hz)
   if (mag <= 0.90 && (freq >= 10.0 || freq === 0)) {
     return {
       category: 'car',
@@ -179,7 +195,7 @@ export function classifyNetworkVibration(
     if (now - r.updatedAt <= 30_000 && r.magnitudeMmS > maxMag) {
       maxMag = r.magnitudeMmS
       matchedFreq = r.frequencyHz
-      matchedDetected = r.vibrationDetected ?? r.magnitudeMmS >= 0.1
+      matchedDetected = r.vibrationDetected ?? r.magnitudeMmS >= 0.35
       matchedRms = r.vibrationRmsMv ?? 0
     }
   }
