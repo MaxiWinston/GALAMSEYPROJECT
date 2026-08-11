@@ -4,17 +4,21 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* Plain fallbacks so UI stays readable if utilities fail; zinc-950 bg + zinc-200 text */
+/* ─── Base reset ─────────────────────────────────────────────── */
 html {
   color-scheme: dark;
   background-color: #09090b;
   color: #e4e4e7;
+  /* Prevent layout shifts when a modal locks scroll */
+  scrollbar-gutter: stable;
 }
 
 html,
 body {
   margin: 0;
   min-height: 100%;
+  /* Smooth momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
 }
 
 #root {
@@ -29,6 +33,18 @@ body {
   font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ─── Safe-area helpers ──────────────────────────────────────── */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+
+  /* Height of the mobile bottom tab bar (px) — used by the map/sheet */
+  --bottom-bar-h: 64px;
+}
+
+/* ─── Leaflet map ────────────────────────────────────────────── */
 .leaflet-container {
   width: 100%;
   min-height: 420px;
@@ -38,6 +54,9 @@ body {
   font-family: inherit;
 }
 
+/* ─── Animations ─────────────────────────────────────────────── */
+
+/* Slide up (modals, panels) */
 @keyframes slide-up {
   from {
     opacity: 0;
@@ -53,4 +72,96 @@ body {
   animation-name: slide-up;
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   animation-fill-mode: both;
+}
+
+/* Bottom sheet entrance */
+@keyframes sheet-enter {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-sheet-enter {
+  animation: sheet-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* FAB pulse ring */
+@keyframes fab-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+.fab-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: fab-ring 1.8s ease-out infinite;
+}
+
+/* Fade-in for stat chips row */
+@keyframes fade-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-down {
+  animation: fade-in-down 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ─── Scrollbar polish ───────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* ─── Bottom-sheet drag handle ───────────────────────────────── */
+.drag-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 9999px;
+  background: #3f3f46;
+  margin: 0 auto 12px;
+  flex-shrink: 0;
+}
+
+/* ─── Prevent iOS input zoom (font-size ≥ 16px) ─────────────── */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+textarea,
+select {
+  font-size: max(16px, 0.875rem);
+}
+
+/* ─── Tab bar link active scale ──────────────────────────────── */
+.tab-item {
+  -webkit-tap-highlight-color: transparent;
 }

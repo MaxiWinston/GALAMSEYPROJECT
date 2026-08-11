@@ -37,6 +37,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
         nodeLabel: n.label,
         magnitudeMmS: r.magnitudeMmS,
         frequencyHz: r.frequencyHz,
+        vibrationDetected: r.vibrationDetected,
         rssi: r.rssi,
         sensorUpdatedAt: r.updatedAt,
         fusedLat: est ? est[0] : null,
@@ -78,6 +79,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
       'node_label',
       'magnitude_mm_s',
       'frequency_hz',
+      'vibration_detected',
       'rssi_dbm',
       'fused_lat',
       'fused_lng',
@@ -85,7 +87,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
       'fused_rmse_mm_s',
       'radial_bearing_deg',
     ]
-    const escape = (v: string | number | null | undefined) => {
+    const escape = (v: string | number | boolean | null | undefined) => {
       if (v == null) return ''
       const s = String(v)
       if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
@@ -101,6 +103,7 @@ export function TelemetryProvider({ children }: { children: ReactNode }) {
           row.nodeLabel,
           row.magnitudeMmS,
           row.frequencyHz,
+          row.vibrationDetected,
           row.rssi ?? '',
           row.fusedLat ?? '',
           row.fusedLng ?? '',

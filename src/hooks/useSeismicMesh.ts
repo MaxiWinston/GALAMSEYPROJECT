@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ref, onValue } from 'firebase/database'
 import { buildKnnMesh, estimateSourceFromMesh } from '../lib/geo'
 import type { LatLng, MeshEdge, NodeReading, SensorNode, TriangulationResult } from '../types'
@@ -12,9 +12,61 @@ type Props = {
   nodes: SensorNode[]
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the node ID from an incoming message.
+ * Firmware may send either `deviceId` (preferred) or `nodeId` (legacy).
+ */
+function resolveDeviceId(payload: Record<string, unknown>): string | null {
+  if (typeof payload.deviceId === 'string' && payload.deviceId.trim()) {
+    return payload.deviceId.trim()
+  }
+  if (typeof payload.nodeId === 'string' && payload.nodeId.trim()) {
+    return payload.nodeId.trim()
+  }
+  return null
+}
+
+/**
+ * Coerce vibrationDetected from the wire (bool, 0/1, "true"/"false").
+ */
+function coerceBool(v: unknown): boolean {
+  if (typeof v === 'boolean') return v
+  if (v === 1 || v === '1' || v === 'true') return true
+  return false
+}
+
+// ── Simulation seed ───────────────────────────────────────────────────────────
+
+const SIM_INTERVAL_MS = 1200
+
+function buildSimReading(nodeId: string): NodeReading {
+  const mag = Math.max(0, 0.3 + (Math.random() - 0.45) * 1.8)
+  const freq = 15 + Math.random() * 60
+  return {
+    nodeId,
+    magnitudeMmS: mag,
+    frequencyHz: freq,
+    vibrationDetected: mag >= 0.15,
+    radialBearingDeg: Math.random() * 360,
+    rssi: -(50 + Math.floor(Math.random() * 40)),
+    updatedAt: Date.now(),
+  }
+}
+
+// ── Main hook ─────────────────────────────────────────────────────────────────
+
 export function useSeismicMesh({ nodes }: Props) {
   const [readings, setReadings] = useState<Map<string, NodeReading>>(() => new Map())
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('disconnected')
+  const [connectionStatus, setConnectionStatus] = useState<
+    'connected' | 'connecting' | 'disconnected'
+  >('disconnected')
+
+  // Keep a stable ref so the sim interval can access current nodes without
+  // re-registering on every node change
+  const nodesRef = useRef(nodes)
+  nodesRef.current = nodes
 
   const positionById = useMemo(() => {
     const m = new Map<string, LatLng>()
@@ -27,61 +79,67 @@ export function useSeismicMesh({ nodes }: Props) {
     [nodes, positionById],
   )
 
-  // ── WebSocket Live Telemetry Connection ────────────────────────────────────
+  // ── WebSocket live feed ──────────────────────────────────────────────────────
   useEffect(() => {
     const wsUrl = import.meta.env.VITE_WS_URL
     if (!wsUrl) return
 
     let socket: WebSocket | null = null
-    let reconnectTimeout: NodeJS.Timeout | null = null
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
     let isMounted = true
     let reconnectDelay = 1000
 
     function connect() {
       if (!isMounted) return
       setConnectionStatus('connecting')
-      console.log(`[WebSocket] Connecting to ${wsUrl}...`)
-      
-      socket = new WebSocket(wsUrl)
+      console.log(`[WebSocket] Connecting to ${wsUrl}…`)
+      socket = new WebSocket(wsUrl as string)
 
       socket.onopen = () => {
         if (!isMounted) return
         setConnectionStatus('connected')
-        reconnectDelay = 1000 // Reset backoff delay on success
-        console.log('[WebSocket] Connection established')
+        reconnectDelay = 1000
+        console.log('[WebSocket] Connected')
       }
 
       socket.onmessage = (event) => {
         if (!isMounted) return
         try {
-          const reading = JSON.parse(event.data) as {
-            nodeId: string
-            magnitudeMmS: number
-            frequencyHz: number
-            radialBearingDeg?: number
-            rssi?: number
-            updatedAt?: number
+          const raw = JSON.parse(event.data) as Record<string, unknown>
+
+          const deviceId = resolveDeviceId(raw)
+          const magnitudeMmS =
+            typeof raw.magnitudeMmS === 'number' ? raw.magnitudeMmS : NaN
+          const frequencyHz =
+            typeof raw.frequencyHz === 'number' ? raw.frequencyHz : NaN
+
+          if (!deviceId || isNaN(magnitudeMmS) || isNaN(frequencyHz)) {
+            console.warn('[WebSocket] Skipped malformed message', raw)
+            return
           }
 
-          if (
-            reading &&
-            typeof reading.nodeId === 'string' &&
-            typeof reading.magnitudeMmS === 'number' &&
-            typeof reading.frequencyHz === 'number'
-          ) {
-            setReadings((prev) => {
-              const next = new Map(prev)
-              next.set(reading.nodeId, {
-                nodeId: reading.nodeId,
-                magnitudeMmS: reading.magnitudeMmS,
-                frequencyHz: reading.frequencyHz,
-                radialBearingDeg: reading.radialBearingDeg,
-                rssi: reading.rssi,
-                updatedAt: Date.now(),
-              })
-              return next
-            })
+          const reading: NodeReading = {
+            nodeId: deviceId,
+            magnitudeMmS,
+            frequencyHz,
+            vibrationDetected: coerceBool(raw.vibrationDetected),
+            radialBearingDeg:
+              typeof raw.radialBearingDeg === 'number'
+                ? raw.radialBearingDeg
+                : undefined,
+            rssi: typeof raw.rssi === 'number' ? raw.rssi : undefined,
+            // Prefer updatedAt from the message if it looks like a unix-ms timestamp
+            updatedAt:
+              typeof raw.updatedAt === 'number' && raw.updatedAt > 1_000_000_000
+                ? raw.updatedAt
+                : Date.now(),
           }
+
+          setReadings((prev) => {
+            const next = new Map(prev)
+            next.set(deviceId, reading)
+            return next
+          })
         } catch (err) {
           console.error('[WebSocket] Failed to parse message:', err)
         }
@@ -90,50 +148,46 @@ export function useSeismicMesh({ nodes }: Props) {
       socket.onclose = (event) => {
         if (!isMounted) return
         setConnectionStatus('disconnected')
-        console.log(`[WebSocket] Connection closed: code=${event.code}, reason=${event.reason}`)
-        
-        // Reconnect with exponential backoff capped at 16 seconds
-        reconnectTimeout = setTimeout(() => {
-          connect()
-        }, reconnectDelay)
-        reconnectDelay = Math.min(16000, reconnectDelay * 2)
+        console.log(`[WebSocket] Closed: code=${event.code}`)
+        reconnectTimeout = setTimeout(connect, reconnectDelay)
+        reconnectDelay = Math.min(16_000, reconnectDelay * 2)
       }
 
       socket.onerror = (err) => {
-        console.error('[WebSocket] Error occurred:', err)
+        console.error('[WebSocket] Error:', err)
       }
     }
 
     connect()
-
     return () => {
       isMounted = false
-      if (socket) {
-        socket.close()
-      }
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout)
-      }
+      socket?.close()
+      if (reconnectTimeout) clearTimeout(reconnectTimeout)
     }
   }, [])
 
-  // ── Scoped per-node onValue Subscriptions ─────────────────────────────────
+  // ── Firebase Realtime Database listener ─────────────────────────────────────
+  // Reads from `nodes/<deviceId>` — the path the ESP32 firmware writes to.
   useEffect(() => {
-    // If WebSocket is active, bypass Firebase readings subscriptions
+    // Skip if WebSocket is configured (takes priority)
     if (import.meta.env.VITE_WS_URL) return
     if (!FIREBASE_ENABLED || nodes.length === 0) return
 
     const unsubscribers: (() => void)[] = []
 
-    async function attachScopedListeners() {
+    async function attachListeners() {
       const { db } = await import('../lib/firebase')
 
       for (const node of nodes) {
-        const nodeRef = ref(db, `readings/${node.id}`)
+        // Path: nodes/<deviceId>  (top-level, written by firmware)
+        const nodeRef = ref(db, `nodes/${node.id}`)
+
         const unsubscribe = onValue(nodeRef, (snapshot) => {
           const r = snapshot.val() as {
+            deviceId?: string
             magnitudeMmS?: number
             frequencyHz?: number
+            vibrationDetected?: boolean | number | string
             radialBearingDeg?: number
             rssi?: number
             updatedAt?: number
@@ -141,40 +195,81 @@ export function useSeismicMesh({ nodes }: Props) {
 
           setReadings((prev) => {
             const next = new Map(prev)
-            if (r && typeof r.magnitudeMmS === 'number' && typeof r.frequencyHz === 'number') {
-              next.set(node.id, {
-                nodeId: node.id,
+
+            if (
+              r &&
+              typeof r.magnitudeMmS === 'number' &&
+              typeof r.frequencyHz === 'number'
+            ) {
+              // deviceId in the document may differ from the path key if the
+              // firmware writes it explicitly — use it; otherwise fall back to
+              // the path key (node.id).
+              const resolvedId =
+                typeof r.deviceId === 'string' && r.deviceId.trim()
+                  ? r.deviceId.trim()
+                  : node.id
+
+              next.set(resolvedId, {
+                nodeId: resolvedId,
                 magnitudeMmS: r.magnitudeMmS,
                 frequencyHz: r.frequencyHz,
+                vibrationDetected: coerceBool(r.vibrationDetected),
                 radialBearingDeg: r.radialBearingDeg,
                 rssi: r.rssi,
-                updatedAt: Date.now(),
+                // Use the Firebase ServerTimestamp directly (already unix ms)
+                updatedAt:
+                  typeof r.updatedAt === 'number' && r.updatedAt > 1_000_000_000
+                    ? r.updatedAt
+                    : Date.now(),
               })
             } else {
               next.delete(node.id)
             }
+
             return next
           })
         })
+
         unsubscribers.push(unsubscribe)
       }
     }
 
-    attachScopedListeners().catch(console.error)
+    attachListeners().catch(console.error)
 
     return () => {
       for (const unsub of unsubscribers) unsub()
     }
   }, [nodes])
 
-  // ── Triangulation ─────────────────────────────────────────────────────────
+  // ── Simulated feed (no Firebase, no WebSocket) ───────────────────────────────
+  useEffect(() => {
+    if (import.meta.env.VITE_WS_URL || FIREBASE_ENABLED) return
+
+    const id = setInterval(() => {
+      const currentNodes = nodesRef.current
+      if (currentNodes.length === 0) return
+      setReadings((prev) => {
+        const next = new Map(prev)
+        for (const n of currentNodes) {
+          next.set(n.id, buildSimReading(n.id))
+        }
+        return next
+      })
+    }, SIM_INTERVAL_MS)
+
+    return () => clearInterval(id)
+  }, [])
+
+  // ── Triangulation ────────────────────────────────────────────────────────────
   const triangulation: TriangulationResult = useMemo(() => {
+    const now = Date.now()
     const samples = nodes
       .map((n) => {
         const r = readings.get(n.id)
         if (!r) return null
-        // Check if reading is fresh (< 30 seconds old)
-        if (Date.now() - r.updatedAt > 30000) return null
+        // Only use fresh readings (< 30 s) where vibration was detected
+        if (now - r.updatedAt > 30_000) return null
+        if (!r.vibrationDetected) return null
         return { position: n.position, magnitude: r.magnitudeMmS }
       })
       .filter((x): x is { position: LatLng; magnitude: number } => x !== null)
@@ -188,11 +283,12 @@ export function useSeismicMesh({ nodes }: Props) {
     }
   }, [nodes, readings])
 
+  // ── Network-level derived values ─────────────────────────────────────────────
   const networkMaxMag = useMemo(() => {
     let m = 0
     const now = Date.now()
     for (const r of readings.values()) {
-      if (now - r.updatedAt <= 30000) {
+      if (now - r.updatedAt <= 30_000 && r.vibrationDetected) {
         m = Math.max(m, r.magnitudeMmS)
       }
     }
@@ -202,13 +298,26 @@ export function useSeismicMesh({ nodes }: Props) {
   const alertLevel =
     networkMaxMag > 2.8 ? 'critical' : networkMaxMag > 1.6 ? 'elevated' : 'nominal'
 
+  const feedMode: 'websocket' | 'simulated' = import.meta.env.VITE_WS_URL
+    ? 'websocket'
+    : FIREBASE_ENABLED
+      ? 'websocket'   // Firebase also shows as "live" in the UI
+      : 'simulated'
+
+  const resolvedConnectionStatus =
+    import.meta.env.VITE_WS_URL
+      ? connectionStatus
+      : FIREBASE_ENABLED
+        ? 'connected'
+        : 'disconnected'
+
   return {
     readings,
     meshEdges,
     triangulation,
     networkMaxMag,
     alertLevel,
-    feedMode: (import.meta.env.VITE_WS_URL ? 'websocket' : (FIREBASE_ENABLED ? 'websocket' : 'simulated')) as 'websocket' | 'simulated',
-    connectionStatus: import.meta.env.VITE_WS_URL ? connectionStatus : (FIREBASE_ENABLED ? 'connected' : 'disconnected'),
+    feedMode,
+    connectionStatus: resolvedConnectionStatus,
   }
 }
