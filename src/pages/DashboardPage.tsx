@@ -372,7 +372,7 @@ export function DashboardPage() {
 
         {/* Map section */}
         <section className="relative flex flex-col overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/30 shadow-[0_0_0_1px_rgba(255,255,255,0.03)_inset]
-          min-h-[min(55vh,560px)] md:min-h-0 md:flex-1
+          min-h-[min(72vh,720px)] md:min-h-[640px] flex-1
         ">
           {/* Map overlay badges */}
           <div className="pointer-events-none absolute left-3 top-3 z-[400] flex max-w-[min(100%,22rem)] flex-col gap-1.5 sm:flex-row sm:flex-wrap">
@@ -388,7 +388,7 @@ export function DashboardPage() {
             )}
           </div>
 
-          <div className="relative z-0 min-h-[min(55vh,560px)] w-full flex-1 md:min-h-0">
+          <div className="relative z-0 min-h-[min(72vh,720px)] md:min-h-[640px] w-full flex-1">
             <SeismicMap
               nodes={nodes}
               readings={readings}

@@ -47,7 +47,7 @@ body {
 /* ─── Leaflet map ────────────────────────────────────────────── */
 .leaflet-container {
   width: 100%;
-  min-height: 420px;
+  min-height: 520px;
   height: 100%;
   border-radius: 1rem;
   background-color: #27272a;
