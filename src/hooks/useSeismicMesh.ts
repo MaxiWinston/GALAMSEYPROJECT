@@ -172,70 +172,95 @@ export function useSeismicMesh({ nodes }: Props) {
   }, [])
 
   // ── Firebase Realtime Database listener ─────────────────────────────────────
-  // Reads from `nodes/<deviceId>` — the path the ESP32 firmware writes to.
+  // Reads from both `readings/` and `nodes/` paths where ESP32 firmware posts telemetry
   useEffect(() => {
     // Skip if WebSocket is configured (takes priority)
     if (import.meta.env.VITE_WS_URL) return
-    if (!FIREBASE_ENABLED || nodes.length === 0) return
+    if (!FIREBASE_ENABLED) return
 
     const unsubscribers: (() => void)[] = []
 
     async function attachListeners() {
       const { db } = await import('../lib/firebase')
 
-      for (const node of nodes) {
-        // Path: nodes/<deviceId>  (top-level, written by firmware)
-        const nodeRef = ref(db, `nodes/${node.id}`)
+      const parseReading = (raw: Record<string, any>, fallbackId: string): NodeReading | null => {
+        if (!raw || typeof raw !== 'object') return null
+        const magnitudeMmS = typeof raw.magnitudeMmS === 'number' ? raw.magnitudeMmS : 0
+        const frequencyHz = typeof raw.frequencyHz === 'number' ? raw.frequencyHz : 0
+        const deviceId = (raw.deviceId ?? fallbackId).toString().trim()
+        if (!deviceId) return null
 
-        const unsubscribe = onValue(nodeRef, (snapshot) => {
-          const r = snapshot.val() as {
-            deviceId?: string
-            magnitudeMmS?: number
-            frequencyHz?: number
-            vibrationDetected?: boolean | number | string
-            radialBearingDeg?: number
-            rssi?: number
-            updatedAt?: number
-          } | null
+        return {
+          nodeId: deviceId,
+          magnitudeMmS,
+          frequencyHz,
+          vibrationDetected: coerceBool(raw.vibrationDetected, magnitudeMmS),
+          radialBearingDeg: typeof raw.radialBearingDeg === 'number' ? raw.radialBearingDeg : undefined,
+          rssi: typeof raw.rssi === 'number' ? raw.rssi : undefined,
+          vibrationRmsMv: typeof raw.vibrationRmsMv === 'number' ? raw.vibrationRmsMv : undefined,
+          acVibrationMv: typeof raw.acVibrationMv === 'number' ? raw.acVibrationMv : undefined,
+          rawSignalMv: typeof raw.rawSignalMv === 'number' ? raw.rawSignalMv : undefined,
+          biasMv: typeof raw.biasMv === 'number' ? raw.biasMv : undefined,
+          updatedAt:
+            typeof raw.updatedAt === 'number' && raw.updatedAt > 1_000_000_000
+              ? raw.updatedAt
+              : Date.now(),
+        }
+      }
 
-          setReadings((prev) => {
-            const next = new Map(prev)
-
-            if (
-              r &&
-              typeof r.magnitudeMmS === 'number' &&
-              typeof r.frequencyHz === 'number'
-            ) {
-              // deviceId in the document may differ from the path key if the
-              // firmware writes it explicitly — use it; otherwise fall back to
-              // the path key (node.id).
-              const resolvedId =
-                typeof r.deviceId === 'string' && r.deviceId.trim()
-                  ? r.deviceId.trim()
-                  : node.id
-
-              next.set(resolvedId, {
-                nodeId: resolvedId,
-                magnitudeMmS: r.magnitudeMmS,
-                frequencyHz: r.frequencyHz,
-                vibrationDetected: coerceBool(r.vibrationDetected, r.magnitudeMmS),
-                radialBearingDeg: r.radialBearingDeg,
-                rssi: r.rssi,
-                // Use the Firebase ServerTimestamp directly (already unix ms)
-                updatedAt:
-                  typeof r.updatedAt === 'number' && r.updatedAt > 1_000_000_000
-                    ? r.updatedAt
-                    : Date.now(),
-              })
-            } else {
-              next.delete(node.id)
+      // 1. Top-level `readings` dictionary listener (e.g. readings/n1, readings/n2)
+      const readingsRef = ref(db, 'readings')
+      const unsubReadings = onValue(readingsRef, (snapshot) => {
+        const val = snapshot.val()
+        if (!val || typeof val !== 'object') return
+        setReadings((prev) => {
+          const next = new Map(prev)
+          for (const [key, item] of Object.entries(val)) {
+            if (item && typeof item === 'object') {
+              const parsed = parseReading(item as Record<string, any>, key)
+              if (parsed) next.set(parsed.nodeId, parsed)
             }
-
-            return next
-          })
+          }
+          return next
         })
+      })
+      unsubscribers.push(unsubReadings)
 
-        unsubscribers.push(unsubscribe)
+      // 2. Top-level `nodes` dictionary listener (fallback path)
+      const nodesRef = ref(db, 'nodes')
+      const unsubNodes = onValue(nodesRef, (snapshot) => {
+        const val = snapshot.val()
+        if (!val || typeof val !== 'object') return
+        setReadings((prev) => {
+          const next = new Map(prev)
+          for (const [key, item] of Object.entries(val)) {
+            if (item && typeof item === 'object') {
+              const parsed = parseReading(item as Record<string, any>, key)
+              if (parsed) next.set(parsed.nodeId, parsed)
+            }
+          }
+          return next
+        })
+      })
+      unsubscribers.push(unsubNodes)
+
+      // 3. Per-node explicit subscriptions for registered nodes
+      for (const node of nodes) {
+        const perNodeRef = ref(db, `readings/${node.id}`)
+        const unsubPerNode = onValue(perNodeRef, (snapshot) => {
+          const item = snapshot.val()
+          if (item && typeof item === 'object') {
+            const parsed = parseReading(item as Record<string, any>, node.id)
+            if (parsed) {
+              setReadings((prev) => {
+                const next = new Map(prev)
+                next.set(parsed.nodeId, parsed)
+                return next
+              })
+            }
+          }
+        })
+        unsubscribers.push(unsubPerNode)
       }
     }
 

@@ -32,6 +32,12 @@ export type NodeReading = {
   rssi?: number
   /** Firebase ServerTimestamp in milliseconds (unix epoch). */
   updatedAt: number
+
+  // Electrical hardware signals (from geophone ADC / ESP32)
+  vibrationRmsMv?: number
+  acVibrationMv?: number
+  rawSignalMv?: number
+  biasMv?: number
 }
 
 export type MeshEdge = readonly [string, string]

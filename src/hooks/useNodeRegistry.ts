@@ -18,11 +18,11 @@ export type AddNodePayload = {
 
 export function useNodeRegistry() {
   const { user } = useAuth()
-  const [nodes, setNodes] = useState<SensorNode[]>([])
+  const [nodes, setNodes] = useState<SensorNode[]>(DEFAULT_NODES)
 
   useEffect(() => {
     if (!user) {
-      setNodes([])
+      setNodes(DEFAULT_NODES)
       return
     }
 
