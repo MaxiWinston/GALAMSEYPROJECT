@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTelemetry } from '../context/telemetryContext'
+import { classifyVibration } from '../lib/vibrationClassifier'
 
 function formatTs(ms: number) {
   return new Date(ms).toLocaleString(undefined, {
@@ -35,6 +36,10 @@ function magTextColor(mag: number) {
 /* ── Mobile row card ──────────────────────────────────────────── */
 function LogCard({ row }: { row: ReturnType<typeof useTelemetry>['logRows'][number] }) {
   const bar = Math.min(100, (row.magnitudeMmS / 4) * 100)
+  const classification = useMemo(
+    () => classifyVibration(row.magnitudeMmS, row.frequencyHz),
+    [row.magnitudeMmS, row.frequencyHz],
+  )
   return (
     <li className="rounded-xl border border-zinc-800/60 bg-zinc-900/60 px-4 py-3.5 space-y-2.5 transition hover:border-zinc-700 active:border-zinc-600">
       {/* Top row: geophone name + timestamp */}
@@ -85,6 +90,14 @@ function LogCard({ row }: { row: ReturnType<typeof useTelemetry>['logRows'][numb
             style={{ width: `${bar}%` }}
           />
         </div>
+      </div>
+
+      {/* Calibrated Source Classification */}
+      <div className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1 text-xs ${classification.badgeBg} ${classification.badgeBorder}`}>
+        <span className="text-[9px] font-medium uppercase tracking-wide text-zinc-500">Calibrated Source:</span>
+        <span className={`text-[10px] font-semibold ${classification.badgeText}`}>
+          {classification.label} ({classification.confidence}%)
+        </span>
       </div>
 
       {/* Metrics grid */}

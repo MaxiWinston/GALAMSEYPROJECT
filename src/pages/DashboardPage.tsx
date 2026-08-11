@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AddNodeModal } from '../components/AddNodeModal'
 import { SeismicMap } from '../components/SeismicMap'
 import { NodeSidebar } from '../components/NodeSidebar'
 import { useTelemetry } from '../context/telemetryContext'
+import { classifyNetworkVibration } from '../lib/vibrationClassifier'
 import type { LatLng } from '../types'
 
 /* ── Alert colour helpers ─────────────────────────────────────── */
@@ -166,6 +167,11 @@ export function DashboardPage() {
   const [placementMode, setPlacementMode] = useState(false)
   const [pendingLatLng, setPendingLatLng] = useState<LatLng | null>(null)
 
+  const networkClassification = useMemo(
+    () => classifyNetworkVibration(readings),
+    [readings],
+  )
+
   function handleAddNodeClick() {
     setPlacementMode(true)
     setPendingLatLng(null)
@@ -230,6 +236,20 @@ export function DashboardPage() {
             </svg>
             Add node
           </button>
+
+          {/* Source calibration card */}
+          <div className={`rounded-2xl border px-4 py-2 text-right text-sm ${networkClassification.badgeBg} ${networkClassification.badgeBorder}`}>
+            <p className="text-[10px] font-medium uppercase tracking-wider opacity-80">
+              Source Calibration
+            </p>
+            <p className={`font-mono text-base font-semibold ${networkClassification.colorClass}`}>
+              {networkClassification.shortLabel}
+            </p>
+            <p className="text-[10px] opacity-90 mt-0.5">{networkClassification.label}</p>
+            <p className="text-[10px] opacity-75">
+              Confidence: <span className="font-mono font-semibold">{networkClassification.confidence}%</span>
+            </p>
+          </div>
 
           {/* Desktop stat cards */}
           <div className={`rounded-2xl border px-4 py-2 text-right text-sm ${alertStyles(alertLevel)}`}>

@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { displayRadialBearing, distanceToEstimate } from '../lib/geo'
+import { classifyVibration } from '../lib/vibrationClassifier'
 import type { LatLng, NodeReading, SensorNode } from '../types'
 
 type Props = {
@@ -36,6 +37,11 @@ function NodeCard({
   const radial = displayRadialBearing(n.position, r, estimate)
   const bar = Math.min(100, (mag / 4) * 100)
   const isPendingRemove = confirmId === n.id
+
+  const classification = useMemo(
+    () => classifyVibration(mag, freq, r?.vibrationRmsMv),
+    [mag, freq, r?.vibrationRmsMv],
+  )
 
   const barColor =
     mag >= 2.8
@@ -192,6 +198,19 @@ function NodeCard({
             title={`Vibration magnitude level (${bar.toFixed(0)}% of 4 mm/s)`}
           />
         </div>
+      </div>
+
+      {/* Calibrated Source Classification */}
+      <div className={`mt-2.5 flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${classification.badgeBg} ${classification.badgeBorder}`}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[10px] text-zinc-500 uppercase font-medium shrink-0">Source:</span>
+          <span className={`text-[11px] font-semibold truncate ${classification.badgeText}`}>
+            {classification.label}
+          </span>
+        </div>
+        <span className="shrink-0 font-mono text-[9px] text-zinc-400">
+          {classification.confidence}% match
+        </span>
       </div>
     </li>
   )
