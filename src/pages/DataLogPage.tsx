@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTelemetry } from '../context/telemetryContext'
 import { classifyVibration } from '../lib/vibrationClassifier'
-import { AUTHENTIC_SEISMIC_SAMPLE_ROWS, AUTHENTIC_SEISMIC_CSV_METADATA, mapAuthenticCSVToMagnitude } from '../lib/authenticSeismicDataset'
 
 function formatTs(ms: number) {
   return new Date(ms).toLocaleString(undefined, {
@@ -32,6 +31,23 @@ function magTextColor(mag: number) {
   if (mag >= 2.8) return 'text-red-300'
   if (mag >= 1.6) return 'text-amber-300'
   return 'text-teal-300'
+}
+
+/* ── Search icon ──────────────────────────────────────────────── */
+function SearchIcon() {
+  return (
+    <svg
+      className="h-4 w-4 text-zinc-500"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    >
+      <circle cx="9" cy="9" r="6" />
+      <path d="M13.5 13.5L18 18" />
+    </svg>
+  )
 }
 
 /* ── Mobile row card ──────────────────────────────────────────── */
@@ -124,69 +140,48 @@ function LogCard({ row }: { row: ReturnType<typeof useTelemetry>['logRows'][numb
             RSSI
           </p>
           <p className="font-mono text-xs text-zinc-400 tabular-nums">
-            {row.rssi != null ? `${row.rssi}` : '—'}
+            {row.rssi != null ? `${row.rssi} dBm` : '—'}
           </p>
         </div>
       </div>
 
-      {/* Fused estimate (if available) */}
-      {(row.fusedLat != null && row.fusedLng != null) && (
-        <div className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-950/15 px-3 py-1.5">
-          <p className="text-[9px] text-zinc-500 uppercase tracking-wide">Fused location</p>
-          <div className="text-right">
-            <p className="font-mono text-[11px] text-amber-200">
-              {row.fusedLat.toFixed(4)}, {row.fusedLng.toFixed(4)}
-            </p>
-            <p className="font-mono text-[10px] text-zinc-500">
-              {row.fusedConfidence != null ? `${(row.fusedConfidence * 100).toFixed(0)}% conf` : ''}
-              {row.fusedRmseMmS != null ? ` · ${row.fusedRmseMmS.toFixed(2)} RMSE` : ''}
-            </p>
-          </div>
+      {/* Fused estimate if present */}
+      {row.fusedLat != null && row.fusedLng != null && (
+        <div className="border-t border-zinc-800/40 pt-2 flex items-center justify-between text-[10px]">
+          <span className="text-zinc-500">Fused epicenter:</span>
+          <span className="font-mono text-amber-200/90">
+            {row.fusedLat.toFixed(4)}, {row.fusedLng.toFixed(4)}
+            {row.fusedConfidence != null && (
+              <span className="text-zinc-500 ml-1">
+                ({(row.fusedConfidence * 100).toFixed(0)}% conf)
+              </span>
+            )}
+          </span>
         </div>
       )}
     </li>
   )
 }
 
-/* ── Search icon ──────────────────────────────────────────────── */
-function SearchIcon() {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      className="h-4 w-4 text-zinc-500"
-    >
-      <circle cx="8.5" cy="8.5" r="5.5" />
-      <path d="M15 15l3 3" />
-    </svg>
-  )
-}
-
+/* ── Main DataLogPage component ───────────────────────────────── */
 export function DataLogPage() {
   const { logRows, clearLog, exportLogCsv } = useTelemetry()
   const [query, setQuery] = useState('')
-  const [viewMode, setViewMode] = useState<'log' | 'authentic_dataset'>('log')
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return logRows
-    return logRows.filter(
-      (r) =>
-        r.nodeId.toLowerCase().includes(q) ||
-        r.nodeLabel.toLowerCase().includes(q) ||
-        formatTs(r.sampleTime).toLowerCase().includes(q),
-    )
+    return logRows.filter((r) => {
+      const label = r.nodeLabel.toLowerCase()
+      const id = r.nodeId.toLowerCase()
+      const ts = formatTs(r.sampleTime).toLowerCase()
+      return label.includes(q) || id.includes(q) || ts.includes(q)
+    })
   }, [logRows, query])
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col bg-gradient-to-br from-zinc-950 via-zinc-950 to-zinc-900 px-4 py-5 md:py-6 md:px-8"
-      style={{ paddingBottom: 'calc(var(--bottom-bar-h) + var(--sab) + 1rem)' }}
-    >
-      <div className="mx-auto w-full max-w-[1600px]">
+    <div className="flex min-h-0 flex-1 flex-col bg-zinc-950 text-zinc-100">
+      <div className="mx-auto w-full max-w-[1600px] flex-1 p-4 md:p-8">
 
         {/* ── Page header ─────────────────────────────────────── */}
         <header className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -195,20 +190,15 @@ export function DataLogPage() {
               Archive
             </p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-zinc-50">
-              Recorded data
+              Recorded data log
             </h1>
             <p className="mt-1.5 max-w-2xl text-sm text-zinc-500">
-              Every sample batch is appended with{' '}
-              <span className="text-zinc-400">recorded time</span> and{' '}
-              <span className="text-zinc-400">sensor updated time</span>.{' '}
-              Store: <span className="text-zinc-400">{logRows.length}</span> rows (cap
-              5,000). Stays in this browser until cleared.
+              Every sample batch is logged with <span className="text-zinc-400">recorded time</span>, <span className="text-zinc-400">peak vibration magnitude</span>, and <span className="text-zinc-400">calibrated source classification</span>. Cap: <span className="text-zinc-400">{logRows.length}</span> rows.
             </p>
           </div>
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2">
-            {/* Back link (mobile only, since desktop has top nav) */}
             <Link
               to="/"
               className="md:hidden flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm font-medium text-zinc-200 hover:bg-zinc-800 active:scale-95"
@@ -252,107 +242,8 @@ export function DataLogPage() {
           </div>
         </header>
 
-        {/* ── View Mode Sub-Navigation ────────────────────────────── */}
-        <div className="mb-5 flex border-b border-zinc-800 gap-4">
-          <button
-            type="button"
-            onClick={() => setViewMode('log')}
-            className={`border-b-2 pb-3 text-sm font-semibold transition ${
-              viewMode === 'log'
-                ? 'border-teal-400 text-teal-300'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            Live Sensor Telemetry Log ({logRows.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('authentic_dataset')}
-            className={`border-b-2 pb-3 text-sm font-semibold transition ${
-              viewMode === 'authentic_dataset'
-                ? 'border-teal-400 text-teal-300'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            Authentic GitHub Seismic CSV Dataset (2,584 Rows) 📊
-          </button>
-        </div>
-
-        {viewMode === 'authentic_dataset' ? (
-          <div className="space-y-4">
-            {/* Metadata Card */}
-            <div className="rounded-2xl border border-teal-500/30 bg-teal-950/20 p-4 text-xs text-teal-200 space-y-2">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="font-semibold text-sm text-teal-100">{AUTHENTIC_SEISMIC_CSV_METADATA.sourceName}</span>
-                <span className="rounded-full bg-teal-900/60 border border-teal-500/30 px-2.5 py-0.5 text-[10px] font-mono text-teal-300">
-                  {AUTHENTIC_SEISMIC_CSV_METADATA.totalRows} Total Geophone Samples
-                </span>
-              </div>
-              <p className="text-zinc-300">
-                Authentic real-world geophone sensor dataset fetched directly from GitHub archive containing ground energy recordings (Joules), geophone pulses, energy deviations, and high-impact seismic bump labels.
-              </p>
-              <div className="pt-1 flex items-center justify-between text-[11px] flex-wrap gap-2">
-                <span className="text-zinc-400">License: {AUTHENTIC_SEISMIC_CSV_METADATA.license}</span>
-                <a
-                  href={AUTHENTIC_SEISMIC_CSV_METADATA.datasetUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-mono text-teal-400 hover:underline flex items-center gap-1"
-                >
-                  View Raw CSV File on GitHub ↗
-                </a>
-              </div>
-            </div>
-
-            {/* Authentic Table */}
-            <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/40">
-              <div className="max-h-[min(70vh,720px)] overflow-auto">
-                <table className="w-full min-w-[700px] border-collapse text-left text-xs">
-                  <thead className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
-                    <tr className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                      <th className="px-3 py-3">Sample #</th>
-                      <th className="px-3 py-3">Seismic Shift</th>
-                      <th className="px-3 py-3 text-right">Seismic Energy (genergy Joules)</th>
-                      <th className="px-3 py-3 text-right">Geophone Pulses (gpuls)</th>
-                      <th className="px-3 py-3 text-right">Energy Dev (gdenergy)</th>
-                      <th className="px-3 py-3 text-right">Pulse Dev (gdpuls)</th>
-                      <th className="px-3 py-3 text-right">Derived PPV (mm/s)</th>
-                      <th className="px-3 py-3">Impact Label</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800/60 font-mono">
-                    {AUTHENTIC_SEISMIC_SAMPLE_ROWS.map((row, idx) => {
-                      const mag = mapAuthenticCSVToMagnitude(row.genergy, row.gpuls)
-                      return (
-                        <tr key={idx} className="hover:bg-zinc-800/40 transition">
-                          <td className="px-3 py-2.5 text-zinc-400">#{idx + 1}</td>
-                          <td className="px-3 py-2.5 text-zinc-300">Shift {row.shift}</td>
-                          <td className="px-3 py-2.5 text-right text-teal-300 tabular-nums">{row.genergy.toLocaleString()} J</td>
-                          <td className="px-3 py-2.5 text-right text-cyan-300 tabular-nums">{row.gpuls} pulses</td>
-                          <td className="px-3 py-2.5 text-right text-zinc-400 tabular-nums">{row.gdenergy}</td>
-                          <td className="px-3 py-2.5 text-right text-zinc-400 tabular-nums">{row.gdpuls}</td>
-                          <td className="px-3 py-2.5 text-right text-amber-300 tabular-nums font-bold">{mag.toFixed(3)} mm/s</td>
-                          <td className="px-3 py-2.5">
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                              row.classLabel === 1
-                                ? 'bg-red-950/60 text-red-300 border border-red-500/40'
-                                : 'bg-teal-950/50 text-teal-300 border border-teal-500/30'
-                            }`}>
-                              {row.classLabel === 1 ? 'High Impact Seismic Event' : 'Ambient Ground State'}
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* ── Filter bar ──────────────────────────────────────── */}
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {/* ── Filter bar ──────────────────────────────────────── */}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex max-w-md flex-1 flex-col gap-1 text-xs text-zinc-500">
             <span className="sr-only">Filter</span>
             <div className="relative">
@@ -492,8 +383,6 @@ export function DataLogPage() {
             </table>
           </div>
         </div>
-      </>
-    )}
 
       </div>
     </div>
