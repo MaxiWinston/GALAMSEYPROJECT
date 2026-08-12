@@ -1,0 +1,20 @@
+sample_id,magnitude_mms,frequency_hz,vibration_rms_mv,ac_vibration_mv,raw_signal_mv,vibration_detected,category,equipment_label,threat_level
+s_001,0.020,2.10,12.40,-2.10,1651.20,0,ambient,Ambient Ground Noise,nominal
+s_002,0.040,4.50,14.10,-3.50,1648.80,0,ambient,Ambient Ground Noise,nominal
+s_003,0.015,1.20,11.80,-1.50,1650.10,0,ambient,Ambient Ground Noise,nominal
+s_004,0.180,3.20,18.50,-12.40,1662.10,1,footsteps,Human Footsteps / Walking,low
+s_005,0.280,5.80,21.20,-16.80,1670.40,1,footsteps,Human Footsteps / Walking,low
+s_006,0.320,8.10,24.00,-19.50,1678.00,1,footsteps,Human Footsteps / Walking,low
+s_007,0.520,16.40,45.10,-38.20,1698.00,1,car,Light Vehicle / Pickup Truck,low
+s_008,0.780,21.50,62.80,-52.40,1712.50,1,car,Light Vehicle / Pickup Truck,low
+s_009,0.850,24.10,71.00,-60.10,1725.00,1,car,Light Vehicle / Automobile,low
+s_010,1.150,11.20,95.40,-88.10,1745.00,1,digging,Manual Digging / Shoveling,medium
+s_011,1.480,14.80,118.20,-105.40,1772.30,1,digging,Manual Digging / Pickaxes,medium
+s_012,1.550,16.00,125.00,-112.00,1780.00,1,digging,Manual Pit Excavation,medium
+s_013,2.100,28.40,165.00,-140.00,1810.00,1,tractor,Agricultural Tractor,medium
+s_014,2.650,34.20,205.00,-180.00,1850.00,1,tractor,Farm Machinery Generator,medium
+s_015,3.450,19.80,240.00,-210.00,1890.00,1,articulated_truck,Heavy Articulated Tipper Truck,high
+s_016,4.200,24.50,310.00,-270.00,1940.00,1,articulated_truck,Heavy Hauler Freight Truck,high
+s_017,5.600,12.50,380.00,-320.00,1980.00,1,bulldozer,Bulldozer / Tracked Excavator,critical
+s_018,7.200,8.40,490.00,-410.00,2150.00,1,bulldozer,Heavy Earthmoving Mining Bulldozer,critical
+s_019,8.800,14.20,620.00,-510.00,2300.00,1,bulldozer,CAT D8 Bulldozer Mining Excavation,critical

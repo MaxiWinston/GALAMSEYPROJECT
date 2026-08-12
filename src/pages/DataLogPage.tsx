@@ -214,6 +214,17 @@ export function DataLogPage() {
             >
               ← Monitor
             </Link>
+            <a
+              href="/galamsey_machinery_seismic_dataset.csv"
+              download="galamsey_machinery_seismic_dataset.csv"
+              className="flex items-center gap-1.5 rounded-xl border border-amber-600/50 bg-amber-950/30 px-3 py-2.5 text-sm font-medium text-amber-200 hover:bg-amber-900/40 active:scale-95 transition"
+              title="Download Galamsey Machinery Training Dataset CSV"
+            >
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-3.5 w-3.5">
+                <path d="M8 2v8M5 7l3 3 3-3M3 13h10" />
+              </svg>
+              Galamsey Dataset CSV 📊
+            </a>
             <button
               type="button"
               onClick={exportLogCsv}
